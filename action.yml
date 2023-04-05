@@ -1,5 +1,5 @@
-name: Setup GitHub CLI (gh)
-description: Installs or updates the GitHub CLI
+name: Setup GitHub CLI
+description: Installs or updates the GitHub CLI (gh)
 author: ser.soft GmbH
 inputs:
   version:
