@@ -127,12 +127,15 @@ async function findMatchingRelease(version: RequestedVersion, token: string | nu
 }
 
 async function install(asset: IReleaseAsset, version: string): Promise<IInstalledVersion> {
-    const downloadedPath = await tools.downloadTool(asset.url, undefined, undefined, {
-        accept: 'application/octet-stream',
-    });
-    const extractedPath = await tools.extractTar(downloadedPath);
-    const subPath = path.join(extractedPath, path.basename(asset.name, `.${assetExtension}`));
-    const cachedPath = await tools.cacheDir(subPath, execName, toolName, version);
+    const downloadedPath = await tools.downloadTool(asset.browser_download_url);
+    let extractedPath: string;
+    if (assetExtension === 'zip') {
+        extractedPath = await tools.extractZip(downloadedPath);
+    } else {
+        extractedPath = await tools.extractTar(downloadedPath);
+        extractedPath = path.join(extractedPath, path.basename(asset.name, `.${assetExtension}`));
+    }
+    const cachedPath = await tools.cacheDir(extractedPath, execName, toolName, version);
     return {version, path: cachedPath};
 }
 
