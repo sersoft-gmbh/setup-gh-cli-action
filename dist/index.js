@@ -84,7 +84,7 @@ const osArch = (() => {
 })();
 const toolName = 'gh-cli';
 const execName = osPlat === 'windows' ? 'gh.exe' : 'gh';
-const assetExtension = 'tar.gz';
+const assetExtension = osPlat === 'windows' ? 'zip' : 'tar.gz';
 async function setAndCheckOutput(installedVersion) {
     await core.group('Checking installation', async () => {
         if (core.isDebug()) {
