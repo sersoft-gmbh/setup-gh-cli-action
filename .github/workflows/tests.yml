@@ -14,7 +14,7 @@ jobs:
     name: Test Specific Version
     strategy:
       matrix:
-        version: [ 5.5, 5.6.2 ]
+        version: [ '2.26.1', '2.20.2' ]
         os: [ 'ubuntu-latest', 'macos-latest', 'windows-latest' ]
     runs-on: ${{ matrix.os }}
     steps:
