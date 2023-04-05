@@ -60,15 +60,21 @@ interface IRelease {
     assets: IReleaseAsset[];
 }
 
-const osPlat= os.platform();
+const osPlat= (() => {
+    switch (os.platform()) {
+        case 'linux': return 'linux';
+        case 'darwin': return 'macOS';
+        case 'win32': return 'windows';
+        default: throw new Error(`Unsupported platform: ${os.platform()}`);
+    }
+})();
 const osArch = (() => {
     const arch = os.arch();
     return (arch === 'x64') ? 'amd64' : arch;
 })();
 const toolName = 'gh-cli';
-const execName = os.platform().startsWith('win') ? 'gh.exe' : 'gh';
+const execName = osPlat === 'windows' ? 'gh.exe' : 'gh';
 const assetExtension = 'tar.gz';
-
 
 async function setAndCheckOutput(installedVersion: IInstalledVersion) {
     await core.group('Checking installation', async () => {
