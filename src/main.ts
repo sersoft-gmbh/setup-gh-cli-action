@@ -124,8 +124,8 @@ async function install(asset: IReleaseAsset, version: string): Promise<IInstalle
         accept: 'application/octet-stream',
     });
     const extractedPath = await tools.extractTar(downloadedPath);
-    const subpath = path.join(extractedPath, path.basename(asset.name, path.extname(asset.name)));
-    const cachedPath = await tools.cacheDir(subpath, execName, toolName, version);
+    const subPath = path.join(extractedPath, path.parse(asset.name).name);
+    const cachedPath = await tools.cacheDir(subPath, execName, toolName, version);
     return {version, path: cachedPath};
 }
 
