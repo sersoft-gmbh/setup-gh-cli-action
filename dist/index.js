@@ -38,6 +38,7 @@ const path = __importStar(__nccwpck_require__(1017));
 const rest_1 = __nccwpck_require__(5375);
 const semver_1 = __nccwpck_require__(1383);
 const os = __importStar(__nccwpck_require__(2037));
+const fs = __importStar(__nccwpck_require__(7147));
 class RequestedVersion {
     static isStable(version) {
         return version === 'stable';
@@ -79,8 +80,14 @@ const execName = os.platform().startsWith('win') ? 'gh.exe' : 'gh';
 async function setAndCheckOutput(installedVersion) {
     await core.group('Checking installation', async () => {
         core.addPath(path.join(installedVersion.path, 'bin'));
+        if (core.isDebug()) {
+            core.debug(`Installed version: ${installedVersion.version}`);
+            core.debug(`Installed path: ${installedVersion.path}`);
+            core.debug('Contents of path:');
+            core.debug(`${fs.readdirSync(installedVersion.path).join('\n')}`);
+        }
         const versionOutput = await (0, exec_1.getExecOutput)(execName, ['version']);
-        if (!versionOutput.stdout.indexOf(installedVersion.version)) {
+        if (versionOutput.stdout.indexOf(installedVersion.version) < 0) {
             throw new Error(`gh version ${installedVersion.version} not found in output: ${versionOutput.stdout}`);
         }
         core.setOutput('installed-version', installedVersion.version);
