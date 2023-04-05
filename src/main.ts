@@ -59,8 +59,14 @@ interface IRelease {
     assets: IReleaseAsset[];
 }
 
+const osPlat= os.platform();
+const osArch = (() => {
+    const arch = os.arch();
+    return (arch === 'x64') ? 'amd64' : arch;
+})();
 const toolName = 'gh-cli';
-const execName = 'gh';
+const execName = os.platform().startsWith('win') ? 'gh.exe' : 'gh';
+
 
 async function setAndCheckOutput(installedVersion: IInstalledVersion) {
     await core.group('Checking installation', async () => {
@@ -76,7 +82,7 @@ async function setAndCheckOutput(installedVersion: IInstalledVersion) {
 async function findMatchingRelease(version: RequestedVersion, token: string | null): Promise<IRelease> {
     let octokit: Octokit;
     if (token) {
-        octokit = github.getOctokit(token) as any;
+        octokit = github.getOctokit(token) as unknown as Octokit;
     } else {
         octokit = new Octokit();
     }
@@ -151,7 +157,7 @@ async function main() {
     installedVersion = await core.group('Installing release', async () => {
         const version = semver_clean(release.tag_name);
         if (!version) throw new Error(`Invalid version: ${release.tag_name}`);
-        const assetName = `gh_${version}_${os.platform()}_${os.arch()}.tar.gz`;
+        const assetName = `gh_${version}_${osPlat}_${osArch}.tar.gz`;
         const asset = release.assets.find(a => a.name === assetName);
         if (!asset) throw new Error(`Could not find a release asset for '${assetName}'`);
         return await install(asset, version);
