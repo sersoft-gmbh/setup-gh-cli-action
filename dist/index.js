@@ -69,8 +69,13 @@ class RequestedVersion {
         return `v${this.semverVersion}`;
     }
 }
+const osPlat = os.platform();
+const osArch = (() => {
+    const arch = os.arch();
+    return (arch === 'x64') ? 'amd64' : arch;
+})();
 const toolName = 'gh-cli';
-const execName = 'gh';
+const execName = os.platform().startsWith('win') ? 'gh.exe' : 'gh';
 async function setAndCheckOutput(installedVersion) {
     await core.group('Checking installation', async () => {
         core.addPath(path.dirname(installedVersion.path));
@@ -94,11 +99,11 @@ async function findMatchingRelease(version, token) {
         repo: 'cli',
     };
     if (version.isStable) {
-        const latestRelease = await octokit.repos.getLatestRelease(baseParams);
+        const latestRelease = await octokit.rest.repos.getLatestRelease(baseParams);
         return latestRelease.data;
     }
     else if (version.isLatest) {
-        const releasesResp = await octokit.repos.listReleases({
+        const releasesResp = await octokit.rest.repos.listReleases({
             ...baseParams,
             per_page: 100,
         });
@@ -109,7 +114,7 @@ async function findMatchingRelease(version, token) {
         return releases[0];
     }
     else {
-        const release = await octokit.repos.getReleaseByTag({
+        const release = await octokit.rest.repos.getReleaseByTag({
             ...baseParams,
             tag: version.tagName,
         });
@@ -159,7 +164,7 @@ async function main() {
         const version = (0, semver_1.clean)(release.tag_name);
         if (!version)
             throw new Error(`Invalid version: ${release.tag_name}`);
-        const assetName = `gh_${version}_${os.platform()}_${os.arch()}.tar.gz`;
+        const assetName = `gh_${version}_${osPlat}_${osArch}.tar.gz`;
         const asset = release.assets.find(a => a.name === assetName);
         if (!asset)
             throw new Error(`Could not find a release asset for '${assetName}'`);
