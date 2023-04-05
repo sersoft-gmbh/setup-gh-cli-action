@@ -77,6 +77,7 @@ const osArch = (() => {
 })();
 const toolName = 'gh-cli';
 const execName = os.platform().startsWith('win') ? 'gh.exe' : 'gh';
+const assetExtension = 'tar.gz';
 async function setAndCheckOutput(installedVersion) {
     await core.group('Checking installation', async () => {
         if (core.isDebug()) {
@@ -132,7 +133,7 @@ async function install(asset, version) {
         accept: 'application/octet-stream',
     });
     const extractedPath = await tools.extractTar(downloadedPath);
-    const subPath = path.join(extractedPath, path.parse(asset.name).name);
+    const subPath = path.join(extractedPath, path.basename(asset.name, assetExtension));
     const cachedPath = await tools.cacheDir(subPath, execName, toolName, version);
     return { version, path: cachedPath };
 }
@@ -171,7 +172,7 @@ async function main() {
         const version = (0, semver_1.clean)(release.tag_name);
         if (!version)
             throw new Error(`Invalid version: ${release.tag_name}`);
-        const assetName = `gh_${version}_${osPlat}_${osArch}.tar.gz`;
+        const assetName = `gh_${version}_${osPlat}_${osArch}.${assetExtension}`;
         const asset = release.assets.find(a => a.name === assetName);
         if (!asset)
             throw new Error(`Could not find a release asset for '${assetName}'`);
