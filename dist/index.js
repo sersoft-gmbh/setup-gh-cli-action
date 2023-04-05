@@ -78,7 +78,7 @@ const toolName = 'gh-cli';
 const execName = os.platform().startsWith('win') ? 'gh.exe' : 'gh';
 async function setAndCheckOutput(installedVersion) {
     await core.group('Checking installation', async () => {
-        core.addPath(path.dirname(installedVersion.path));
+        core.addPath(path.join(installedVersion.path, 'bin'));
         const versionOutput = await (0, exec_1.getExecOutput)(execName, ['version']);
         if (!versionOutput.stdout.indexOf(installedVersion.version)) {
             throw new Error(`gh version ${installedVersion.version} not found in output: ${versionOutput.stdout}`);
@@ -126,7 +126,7 @@ async function install(asset, version) {
         accept: 'application/octet-stream',
     });
     const extractedPath = await tools.extractTar(downloadedPath);
-    const path = await tools.cacheFile(extractedPath, execName, toolName, version);
+    const path = await tools.cacheDir(extractedPath, execName, toolName, version);
     return { version, path };
 }
 function checkCache(version) {
