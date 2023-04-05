@@ -79,17 +79,16 @@ const toolName = 'gh-cli';
 const execName = os.platform().startsWith('win') ? 'gh.exe' : 'gh';
 async function setAndCheckOutput(installedVersion) {
     await core.group('Checking installation', async () => {
-        core.addPath(path.join(installedVersion.path, 'bin'));
         if (core.isDebug()) {
             core.debug(`Installed version: ${installedVersion.version}`);
             core.debug(`Installed path: ${installedVersion.path}`);
             core.debug('Contents of path:');
             core.debug(`${fs.readdirSync(installedVersion.path).join('\n')}`);
         }
+        core.addPath(path.join(installedVersion.path, 'bin'));
         const versionOutput = await (0, exec_1.getExecOutput)(execName, ['version']);
-        if (versionOutput.stdout.indexOf(installedVersion.version) < 0) {
+        if (versionOutput.stdout.indexOf(installedVersion.version) < 0)
             throw new Error(`gh version ${installedVersion.version} not found in output: ${versionOutput.stdout}`);
-        }
         core.setOutput('installed-version', installedVersion.version);
     });
 }
@@ -133,8 +132,9 @@ async function install(asset, version) {
         accept: 'application/octet-stream',
     });
     const extractedPath = await tools.extractTar(downloadedPath);
-    const path = await tools.cacheDir(extractedPath, execName, toolName, version);
-    return { version, path };
+    const subpath = path.join(extractedPath, path.basename(asset.name, path.extname(asset.name)));
+    const cachedPath = await tools.cacheDir(subpath, execName, toolName, version);
+    return { version, path: cachedPath };
 }
 function checkCache(version) {
     const semverVersion = (0, semver_1.clean)(version);
