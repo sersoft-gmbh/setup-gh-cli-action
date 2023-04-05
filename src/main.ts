@@ -92,10 +92,10 @@ async function findMatchingRelease(version: RequestedVersion, token: string | nu
         repo: 'cli',
     };
     if (version.isStable) {
-        const latestRelease = await octokit.repos.getLatestRelease(baseParams);
+        const latestRelease = await octokit.rest.repos.getLatestRelease(baseParams);
         return latestRelease.data;
     } else if (version.isLatest) {
-        const releasesResp = await octokit.repos.listReleases({
+        const releasesResp = await octokit.rest.repos.listReleases({
             ...baseParams,
             per_page: 100,
         });
@@ -105,7 +105,7 @@ async function findMatchingRelease(version: RequestedVersion, token: string | nu
         releases.sort((l, r) => semver_compare(semver_clean(r.tag_name)!, semver_clean(l.tag_name)!));
         return releases[0];
     } else {
-        const release = await octokit.repos.getReleaseByTag({
+        const release = await octokit.rest.repos.getReleaseByTag({
             ...baseParams,
             tag: version.tagName,
         });
