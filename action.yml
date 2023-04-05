@@ -1,0 +1,20 @@
+name: Setup GH CLI
+description: Installs or updates the GitHub CLI
+author: ser.soft GmbH
+inputs:
+  version:
+    description: The `gh` version to install. Can also be set to `latest` to install the latest available version (including prereleases), or `stable` to install the latest stable release.
+    default: stable
+    required: true
+  github-token:
+    description: The token to use for retrieving the release. Can be set to `secrets.GITHUB_TOKEN`. Use this if you hit rate limits.
+    required: false
+outputs:
+  installed-version:
+    description: The full version that was installed.
+runs:
+  using: node16
+  main: dist/index.js
+branding:
+  color: white
+  icon: terminal

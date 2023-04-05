@@ -1,0 +1,39 @@
+{
+  "name": "setup-gh-cli-action",
+  "version": "1.0.0",
+  "description": "Installs or updates the GitHub CLI.",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "pack": "rm -rf dist && ncc build lib/main.js -o dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sersoft-gmbh/setup-gh-cli-action.git"
+  },
+  "keywords": [
+    "CLI",
+    "GitHub"
+  ],
+  "author": "ser.soft GmbH",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/sersoft-gmbh/setup-gh-cli-action/issues"
+  },
+  "homepage": "https://github.com/sersoft-gmbh/setup-gh-cli-action#readme",
+  "dependencies": {
+    "@actions/core": "^1.10.0",
+    "@actions/exec": "^1.1.1",
+    "@actions/github": "^5.1.1",
+    "@actions/tool-cache": "^2.0.1",
+    "@octokit/rest": "^19.0.7",
+    "semver": "^7.3.8"
+  },
+  "devDependencies": {
+    "@types/node": "^16.18.22",
+    "@types/semver": "^7.3.13",
+    "@vercel/ncc": "^0.36.1",
+    "typescript": "^5.0.2"
+  }
+}
