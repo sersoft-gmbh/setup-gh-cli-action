@@ -8,12 +8,20 @@ import {clean as semver_clean, compare as semver_compare} from 'semver';
 import * as os from 'os';
 import * as fs from 'fs';
 
-const osPlat= (() => {
+interface ICleanedVersion {
+    versionString: string;
+}
+
+const osPlat = (() => {
     switch (os.platform()) {
-        case 'linux': return 'linux';
-        case 'darwin': return 'macOS';
-        case 'win32': return 'windows';
-        default: throw new Error(`Unsupported platform: ${os.platform()}`);
+        case 'linux':
+            return 'linux';
+        case 'darwin':
+            return 'macOS';
+        case 'win32':
+            return 'windows';
+        default:
+            throw new Error(`Unsupported platform: ${os.platform()}`);
     }
 })();
 const osArch = (() => {
@@ -23,17 +31,17 @@ const osArch = (() => {
 const toolName = 'gh-cli';
 const execName = osPlat === 'windows' ? 'gh.exe' : 'gh';
 
-function assetExtension(version: string): string {
+function cleanedVersion(version: string): ICleanedVersion {
+    const semverVersion = semver_clean(version);
+    if (!semverVersion) throw new Error(`Invalid version: ${version}`);
+    return {versionString: semverVersion};
+}
+
+function assetExtension(version: ICleanedVersion): string {
     if (osPlat === 'windows') return 'zip';
     if (osPlat !== 'macOS') return 'tar.gz';
     // macOS assets were changed to zips in 2.28.0.
-    return semver_compare(cleanedVersion(version), '2.28.0') === -1 ? 'tar.gz' : 'zip';
-}
-
-function cleanedVersion(version: string): string {
-    const semverVersion = semver_clean(version);
-    if (!semverVersion) throw new Error(`Invalid version: ${version}`);
-    return semverVersion;
+    return semver_compare(version.versionString, '2.28.0') === -1 ? 'tar.gz' : 'zip';
 }
 
 class RequestedVersion {
@@ -45,7 +53,8 @@ class RequestedVersion {
         return version === 'latest';
     }
 
-    readonly semverVersion: string | null;
+    readonly semverVersion: ICleanedVersion | null;
+
     constructor(public inputVersion: string) {
         if (RequestedVersion.isStable(inputVersion) || RequestedVersion.isLatest(inputVersion)) {
             this.semverVersion = null;
@@ -62,16 +71,20 @@ class RequestedVersion {
         return RequestedVersion.isLatest(this.inputVersion);
     }
 
-    get tagName(): string {
+    get cleanedVersion(): ICleanedVersion {
         if (this.isStable || this.isLatest || !this.semverVersion) {
-            throw new Error(`Cannot get tag name for ${this.inputVersion}`);
+            throw new Error(`'${this.inputVersion}' is not a valid semver version!`);
         }
-        return `v${this.semverVersion}`;
+        return this.semverVersion;
+    }
+
+    get tagName(): string {
+        return `v${this.cleanedVersion.versionString}`;
     }
 }
 
 interface IInstalledVersion {
-    version: string;
+    version: ICleanedVersion;
     path: string;
 }
 
@@ -82,23 +95,23 @@ interface IReleaseAsset {
 }
 
 interface IRelease {
-    tag_name: string;
+    version: ICleanedVersion;
     assets: IReleaseAsset[];
 }
 
 async function setAndCheckOutput(installedVersion: IInstalledVersion) {
     await core.group('Checking installation', async () => {
         if (core.isDebug()) {
-            core.debug(`Installed version: ${installedVersion.version}`);
+            core.debug(`Installed version: ${installedVersion.version.versionString}`);
             core.debug(`Installed path: ${installedVersion.path}`);
             core.debug('Contents of path:');
             core.debug(`${fs.readdirSync(installedVersion.path).join('\n')}`);
         }
         core.addPath(path.join(installedVersion.path, 'bin'));
         const versionOutput = await getExecOutput(execName, ['version']);
-        if (versionOutput.stdout.indexOf(installedVersion.version) < 0)
-            throw new Error(`gh version ${installedVersion.version} not found in output: ${versionOutput.stdout}`);
-        core.setOutput('installed-version', installedVersion.version);
+        if (versionOutput.stdout.indexOf(installedVersion.version.versionString) < 0)
+            throw new Error(`gh version ${installedVersion.version.versionString} not found in output: ${versionOutput.stdout}`);
+        core.setOutput('installed-version', installedVersion.version.versionString);
     });
 }
 
@@ -116,27 +129,42 @@ async function findMatchingRelease(version: RequestedVersion, token: string | nu
     };
     if (version.isStable) {
         const latestRelease = await octokit.rest.repos.getLatestRelease(baseParams);
-        return latestRelease.data;
+        return {
+            version: cleanedVersion(latestRelease.data.tag_name),
+            assets: latestRelease.data.assets,
+        };
     } else if (version.isLatest) {
         const releasesResp = await octokit.rest.repos.listReleases({
             ...baseParams,
             per_page: 100,
         });
-        const releases = releasesResp.data.filter(r => !!semver_clean(r.tag_name));
+        let releases: IRelease[] = [];
+        releasesResp.data.forEach(r => {
+            try {
+                releases.push({
+                    version: cleanedVersion(r.tag_name),
+                    assets: r.assets,
+                });
+            } catch (e) {
+            }
+        });
         if (releases.length <= 0)
             throw new Error('Could not find a valid release!');
-        releases.sort((l, r) => semver_compare(semver_clean(r.tag_name)!, semver_clean(l.tag_name)!));
+        releases.sort((l, r) => semver_compare(r.version.versionString, l.version.versionString));
         return releases[0];
     } else {
         const release = await octokit.rest.repos.getReleaseByTag({
             ...baseParams,
             tag: version.tagName,
         });
-        return release.data;
+        return {
+            version: cleanedVersion(release.data.tag_name),
+            assets: release.data.assets,
+        };
     }
 }
 
-async function install(asset: IReleaseAsset, version: string): Promise<IInstalledVersion> {
+async function install(asset: IReleaseAsset, version: ICleanedVersion): Promise<IInstalledVersion> {
     const downloadedPath = await tools.downloadTool(asset.browser_download_url);
     const extension = assetExtension(version);
     let extractedPath: string;
@@ -151,16 +179,15 @@ async function install(asset: IReleaseAsset, version: string): Promise<IInstalle
         default:
             throw new Error(`Unsupported extension: ${extension}`);
     }
-    const cachedPath = await tools.cacheDir(extractedPath, execName, toolName, version);
+    const cachedPath = await tools.cacheDir(extractedPath, execName, toolName, version.versionString);
     return {version, path: cachedPath};
 }
 
-function checkCache(version: string): IInstalledVersion | null {
-    const semverVersion = cleanedVersion(version);
-    const cachedVersion = tools.find(toolName, semverVersion);
+function checkCache(version: ICleanedVersion): IInstalledVersion | null {
+    const cachedVersion = tools.find(toolName, version.versionString);
     if (cachedVersion) {
         core.info('Found cached version.');
-        return {version: semverVersion, path: cachedVersion};
+        return {version: version, path: cachedVersion};
     }
     return null;
 }
@@ -173,7 +200,7 @@ async function main() {
 
     let installedVersion = await core.group('Checking cache', async () => {
         if (!version.isStable && !version.isLatest) {
-            return checkCache(version.tagName);
+            return checkCache(version.cleanedVersion);
         }
         return null;
     });
@@ -182,16 +209,15 @@ async function main() {
     let release: IRelease;
     installedVersion = await core.group('Fetching release', async () => {
         release = await findMatchingRelease(version, ghToken);
-        return checkCache(release.tag_name);
+        return checkCache(release.version);
     });
     if (installedVersion) return await setAndCheckOutput(installedVersion);
 
     installedVersion = await core.group('Installing release', async () => {
-        const version = cleanedVersion(release.tag_name);
-        const assetName = `gh_${version}_${osPlat}_${osArch}.${assetExtension}`;
+        const assetName = `gh_${release.version.versionString}_${osPlat}_${osArch}.${assetExtension(release.version)}`;
         const asset = release.assets.find(a => a.name === assetName);
         if (!asset) throw new Error(`Could not find a release asset for '${assetName}'`);
-        return await install(asset, version);
+        return await install(asset, release.version);
     });
     await setAndCheckOutput(installedVersion);
 }
