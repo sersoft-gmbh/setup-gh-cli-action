@@ -148,8 +148,7 @@ async function findMatchingRelease(version: RequestedVersion, token: string | nu
             } catch (e) {
             }
         });
-        if (releases.length <= 0)
-            throw new Error('Could not find a valid release!');
+        if (releases.length <= 0) throw new Error('Could not find a valid release!');
         releases.sort((l, r) => semver_compare(r.version.versionString, l.version.versionString));
         return releases[0];
     } else {
@@ -174,10 +173,18 @@ async function install(asset: IReleaseAsset, version: ICleanedVersion): Promise<
             break;
         case 'tar.gz':
             extractedPath = await tools.extractTar(downloadedPath);
-            extractedPath = path.join(extractedPath, path.basename(asset.name, `.${extension}`));
             break;
         default:
             throw new Error(`Unsupported extension: ${extension}`);
+    }
+    const possibleSubfolder = path.basename(asset.name, `.${extension}`);
+    const contents = fs.readdirSync(extractedPath);
+    if (!contents.includes('bin') && contents.includes(possibleSubfolder)) {
+        extractedPath = path.join(extractedPath, possibleSubfolder);
+    }
+    if (!contents.includes('bin')) {
+        core.debug(`Contents:\n${contents.join('\n')}`);
+        throw new Error('Could not find a suitable binary folder in the extracted asset!');
     }
     const cachedPath = await tools.cacheDir(extractedPath, execName, toolName, version.versionString);
     return {version, path: cachedPath};
@@ -185,11 +192,9 @@ async function install(asset: IReleaseAsset, version: ICleanedVersion): Promise<
 
 function checkCache(version: ICleanedVersion): IInstalledVersion | null {
     const cachedVersion = tools.find(toolName, version.versionString);
-    if (cachedVersion) {
-        core.info('Found cached version.');
-        return {version: version, path: cachedVersion};
-    }
-    return null;
+    if (!cachedVersion) return null;
+    core.info('Found cached version.');
+    return {version: version, path: cachedVersion};
 }
 
 async function main() {
@@ -199,9 +204,8 @@ async function main() {
     core.endGroup();
 
     let installedVersion = await core.group('Checking cache', async () => {
-        if (!version.isStable && !version.isLatest) {
+        if (!version.isStable && !version.isLatest)
             return checkCache(version.cleanedVersion);
-        }
         return null;
     });
     if (installedVersion) return await setAndCheckOutput(installedVersion);
