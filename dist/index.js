@@ -178,21 +178,28 @@ async function install(asset, version) {
             break;
         case 'tar.gz':
             extractedPath = await tools.extractTar(downloadedPath);
-            extractedPath = path.join(extractedPath, path.basename(asset.name, `.${extension}`));
             break;
         default:
             throw new Error(`Unsupported extension: ${extension}`);
+    }
+    const possibleSubfolder = path.basename(asset.name, `.${extension}`);
+    const contents = fs.readdirSync(extractedPath);
+    if (!contents.includes('bin') && contents.includes(possibleSubfolder)) {
+        extractedPath = path.join(extractedPath, possibleSubfolder);
+    }
+    if (!contents.includes('bin')) {
+        core.debug(`Contents:\n${contents.join('\n')}`);
+        throw new Error('Could not find a suitable binary folder in the extracted asset!');
     }
     const cachedPath = await tools.cacheDir(extractedPath, execName, toolName, version.versionString);
     return { version, path: cachedPath };
 }
 function checkCache(version) {
     const cachedVersion = tools.find(toolName, version.versionString);
-    if (cachedVersion) {
-        core.info('Found cached version.');
-        return { version: version, path: cachedVersion };
-    }
-    return null;
+    if (!cachedVersion)
+        return null;
+    core.info('Found cached version.');
+    return { version: version, path: cachedVersion };
 }
 async function main() {
     core.startGroup('Validate input');
@@ -200,9 +207,8 @@ async function main() {
     const ghToken = core.getInput('github-token');
     core.endGroup();
     let installedVersion = await core.group('Checking cache', async () => {
-        if (!version.isStable && !version.isLatest) {
+        if (!version.isStable && !version.isLatest)
             return checkCache(version.cleanedVersion);
-        }
         return null;
     });
     if (installedVersion)
