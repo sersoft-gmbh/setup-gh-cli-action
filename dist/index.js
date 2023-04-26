@@ -39,37 +39,6 @@ const rest_1 = __nccwpck_require__(5375);
 const semver_1 = __nccwpck_require__(1383);
 const os = __importStar(__nccwpck_require__(2037));
 const fs = __importStar(__nccwpck_require__(7147));
-class RequestedVersion {
-    static isStable(version) {
-        return version === 'stable';
-    }
-    static isLatest(version) {
-        return version === 'latest';
-    }
-    constructor(inputVersion) {
-        this.inputVersion = inputVersion;
-        if (RequestedVersion.isStable(inputVersion) || RequestedVersion.isLatest(inputVersion)) {
-            this.semverVersion = null;
-            return;
-        }
-        const v = (0, semver_1.clean)(this.inputVersion);
-        if (!v)
-            throw new Error(`Invalid version: ${this.inputVersion}`);
-        this.semverVersion = v;
-    }
-    get isStable() {
-        return RequestedVersion.isStable(this.inputVersion);
-    }
-    get isLatest() {
-        return RequestedVersion.isLatest(this.inputVersion);
-    }
-    get tagName() {
-        if (this.isStable || this.isLatest || !this.semverVersion) {
-            throw new Error(`Cannot get tag name for ${this.inputVersion}`);
-        }
-        return `v${this.semverVersion}`;
-    }
-}
 const osPlat = (() => {
     switch (os.platform()) {
         case 'linux': return 'linux';
@@ -84,7 +53,48 @@ const osArch = (() => {
 })();
 const toolName = 'gh-cli';
 const execName = osPlat === 'windows' ? 'gh.exe' : 'gh';
-const assetExtension = osPlat === 'windows' ? 'zip' : 'tar.gz';
+function assetExtension(version) {
+    if (osPlat === 'windows')
+        return 'zip';
+    if (osPlat !== 'macOS')
+        return 'tar.gz';
+    // macOS assets were changed to zips in 2.28.0.
+    return (0, semver_1.compare)(cleanedVersion(version), '2.28.0') === -1 ? 'tar.gz' : 'zip';
+}
+function cleanedVersion(version) {
+    const semverVersion = (0, semver_1.clean)(version);
+    if (!semverVersion)
+        throw new Error(`Invalid version: ${version}`);
+    return semverVersion;
+}
+class RequestedVersion {
+    static isStable(version) {
+        return version === 'stable';
+    }
+    static isLatest(version) {
+        return version === 'latest';
+    }
+    constructor(inputVersion) {
+        this.inputVersion = inputVersion;
+        if (RequestedVersion.isStable(inputVersion) || RequestedVersion.isLatest(inputVersion)) {
+            this.semverVersion = null;
+            return;
+        }
+        this.semverVersion = cleanedVersion(this.inputVersion);
+    }
+    get isStable() {
+        return RequestedVersion.isStable(this.inputVersion);
+    }
+    get isLatest() {
+        return RequestedVersion.isLatest(this.inputVersion);
+    }
+    get tagName() {
+        if (this.isStable || this.isLatest || !this.semverVersion) {
+            throw new Error(`Cannot get tag name for ${this.inputVersion}`);
+        }
+        return `v${this.semverVersion}`;
+    }
+}
 async function setAndCheckOutput(installedVersion) {
     await core.group('Checking installation', async () => {
         if (core.isDebug()) {
@@ -137,21 +147,24 @@ async function findMatchingRelease(version, token) {
 }
 async function install(asset, version) {
     const downloadedPath = await tools.downloadTool(asset.browser_download_url);
+    const extension = assetExtension(version);
     let extractedPath;
-    if (assetExtension === 'zip') {
-        extractedPath = await tools.extractZip(downloadedPath);
-    }
-    else {
-        extractedPath = await tools.extractTar(downloadedPath);
-        extractedPath = path.join(extractedPath, path.basename(asset.name, `.${assetExtension}`));
+    switch (extension) {
+        case 'zip':
+            extractedPath = await tools.extractZip(downloadedPath);
+            break;
+        case 'tar.gz':
+            extractedPath = await tools.extractTar(downloadedPath);
+            extractedPath = path.join(extractedPath, path.basename(asset.name, `.${extension}`));
+            break;
+        default:
+            throw new Error(`Unsupported extension: ${extension}`);
     }
     const cachedPath = await tools.cacheDir(extractedPath, execName, toolName, version);
     return { version, path: cachedPath };
 }
 function checkCache(version) {
-    const semverVersion = (0, semver_1.clean)(version);
-    if (!semverVersion)
-        throw new Error(`Invalid version: ${version}`);
+    const semverVersion = cleanedVersion(version);
     const cachedVersion = tools.find(toolName, semverVersion);
     if (cachedVersion) {
         core.info('Found cached version.');
@@ -180,9 +193,7 @@ async function main() {
     if (installedVersion)
         return await setAndCheckOutput(installedVersion);
     installedVersion = await core.group('Installing release', async () => {
-        const version = (0, semver_1.clean)(release.tag_name);
-        if (!version)
-            throw new Error(`Invalid version: ${release.tag_name}`);
+        const version = cleanedVersion(release.tag_name);
         const assetName = `gh_${version}_${osPlat}_${osArch}.${assetExtension}`;
         const asset = release.assets.find(a => a.name === assetName);
         if (!asset)
@@ -13132,13 +13143,6 @@ class Comparator {
       throw new TypeError('a Comparator is required')
     }
 
-    if (!options || typeof options !== 'object') {
-      options = {
-        loose: !!options,
-        includePrerelease: false,
-      }
-    }
-
     if (this.operator === '') {
       if (this.value === '') {
         return true
@@ -13151,32 +13155,43 @@ class Comparator {
       return new Range(this.value, options).test(comp.semver)
     }
 
-    const sameDirectionIncreasing =
-      (this.operator === '>=' || this.operator === '>') &&
-      (comp.operator === '>=' || comp.operator === '>')
-    const sameDirectionDecreasing =
-      (this.operator === '<=' || this.operator === '<') &&
-      (comp.operator === '<=' || comp.operator === '<')
-    const sameSemVer = this.semver.version === comp.semver.version
-    const differentDirectionsInclusive =
-      (this.operator === '>=' || this.operator === '<=') &&
-      (comp.operator === '>=' || comp.operator === '<=')
-    const oppositeDirectionsLessThan =
-      cmp(this.semver, '<', comp.semver, options) &&
-      (this.operator === '>=' || this.operator === '>') &&
-        (comp.operator === '<=' || comp.operator === '<')
-    const oppositeDirectionsGreaterThan =
-      cmp(this.semver, '>', comp.semver, options) &&
-      (this.operator === '<=' || this.operator === '<') &&
-        (comp.operator === '>=' || comp.operator === '>')
+    options = parseOptions(options)
 
-    return (
-      sameDirectionIncreasing ||
-      sameDirectionDecreasing ||
-      (sameSemVer && differentDirectionsInclusive) ||
-      oppositeDirectionsLessThan ||
-      oppositeDirectionsGreaterThan
-    )
+    // Special cases where nothing can possibly be lower
+    if (options.includePrerelease &&
+      (this.value === '<0.0.0-0' || comp.value === '<0.0.0-0')) {
+      return false
+    }
+    if (!options.includePrerelease &&
+      (this.value.startsWith('<0.0.0') || comp.value.startsWith('<0.0.0'))) {
+      return false
+    }
+
+    // Same direction increasing (> or >=)
+    if (this.operator.startsWith('>') && comp.operator.startsWith('>')) {
+      return true
+    }
+    // Same direction decreasing (< or <=)
+    if (this.operator.startsWith('<') && comp.operator.startsWith('<')) {
+      return true
+    }
+    // same SemVer and both sides are inclusive (<= or >=)
+    if (
+      (this.semver.version === comp.semver.version) &&
+      this.operator.includes('=') && comp.operator.includes('=')) {
+      return true
+    }
+    // opposite directions less than
+    if (cmp(this.semver, '<', comp.semver, options) &&
+      this.operator.startsWith('>') && comp.operator.startsWith('<')) {
+      return true
+    }
+    // opposite directions greater than
+    if (cmp(this.semver, '>', comp.semver, options) &&
+      this.operator.startsWith('<') && comp.operator.startsWith('>')) {
+      return true
+    }
+    return false
   }
 }
 
@@ -13278,8 +13293,10 @@ class Range {
 
     // memoize range parsing for performance.
     // this is a very hot path, and fully deterministic.
-    const memoOpts = Object.keys(this.options).join(',')
-    const memoKey = `parseRange:${memoOpts}:${range}`
+    const memoOpts =
+      (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) |
+      (this.options.loose && FLAG_LOOSE)
+    const memoKey = memoOpts + ':' + range
     const cached = cache.get(memoKey)
     if (cached) {
       return cached
@@ -13387,6 +13404,7 @@ class Range {
     return false
   }
 }
+
 module.exports = Range
 
 const LRU = __nccwpck_require__(7129)
@@ -13403,6 +13421,7 @@ const {
   tildeTrimReplace,
   caretTrimReplace,
 } = __nccwpck_require__(9523)
+const { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = __nccwpck_require__(2293)
 
 const isNullSet = c => c.value === '<0.0.0-0'
 const isAny = c => c.value === ''
@@ -13742,7 +13761,7 @@ class SemVer {
         version = version.version
       }
     } else if (typeof version !== 'string') {
-      throw new TypeError(`Invalid Version: ${version}`)
+      throw new TypeError(`Invalid Version: ${(__nccwpck_require__(3837).inspect)(version)}`)
     }
 
     if (version.length > MAX_LENGTH) {
@@ -13901,36 +13920,36 @@ class SemVer {
 
   // preminor will bump the version up to the next minor release, and immediately
   // down to pre-release. premajor and prepatch work the same way.
-  inc (release, identifier) {
+  inc (release, identifier, identifierBase) {
     switch (release) {
       case 'premajor':
         this.prerelease.length = 0
         this.patch = 0
         this.minor = 0
         this.major++
-        this.inc('pre', identifier)
+        this.inc('pre', identifier, identifierBase)
         break
       case 'preminor':
         this.prerelease.length = 0
         this.patch = 0
         this.minor++
-        this.inc('pre', identifier)
+        this.inc('pre', identifier, identifierBase)
         break
       case 'prepatch':
         // If this is already a prerelease, it will bump to the next version
         // drop any prereleases that might already exist, since they are not
         // relevant at this point.
         this.prerelease.length = 0
-        this.inc('patch', identifier)
-        this.inc('pre', identifier)
+        this.inc('patch', identifier, identifierBase)
+        this.inc('pre', identifier, identifierBase)
         break
       // If the input is a non-prerelease version, this acts the same as
       // prepatch.
       case 'prerelease':
         if (this.prerelease.length === 0) {
-          this.inc('patch', identifier)
+          this.inc('patch', identifier, identifierBase)
         }
-        this.inc('pre', identifier)
+        this.inc('pre', identifier, identifierBase)
         break
 
       case 'major':
@@ -13972,9 +13991,15 @@ class SemVer {
         break
       // This probably shouldn't be used publicly.
       // 1.0.0 'pre' would become 1.0.0-0 which is the wrong direction.
-      case 'pre':
+      case 'pre': {
+        const base = Number(identifierBase) ? 1 : 0
+
+        if (!identifier && identifierBase === false) {
+          throw new Error('invalid increment argument: identifier is empty')
+        }
+
         if (this.prerelease.length === 0) {
-          this.prerelease = [0]
+          this.prerelease = [base]
         } else {
           let i = this.prerelease.length
           while (--i >= 0) {
@@ -13985,22 +14010,29 @@ class SemVer {
           }
           if (i === -1) {
             // didn't increment anything
-            this.prerelease.push(0)
+            if (identifier === this.prerelease.join('.') && identifierBase === false) {
+              throw new Error('invalid increment argument: identifier already exists')
+            }
+            this.prerelease.push(base)
           }
         }
         if (identifier) {
           // 1.2.0-beta.1 bumps to 1.2.0-beta.2,
           // 1.2.0-beta.fooblz or 1.2.0-beta bumps to 1.2.0-beta.0
+          let prerelease = [identifier, base]
+          if (identifierBase === false) {
+            prerelease = [identifier]
+          }
           if (compareIdentifiers(this.prerelease[0], identifier) === 0) {
             if (isNaN(this.prerelease[1])) {
-              this.prerelease = [identifier, 0]
+              this.prerelease = prerelease
             }
           } else {
-            this.prerelease = [identifier, 0]
+            this.prerelease = prerelease
           }
         }
         break
-
+      }
       default:
         throw new Error(`invalid increment argument: ${release}`)
     }
@@ -14186,27 +14218,58 @@ module.exports = compare
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const parse = __nccwpck_require__(5925)
-const eq = __nccwpck_require__(1898)
 
 const diff = (version1, version2) => {
-  if (eq(version1, version2)) {
+  const v1 = parse(version1, null, true)
+  const v2 = parse(version2, null, true)
+  const comparison = v1.compare(v2)
+
+  if (comparison === 0) {
     return null
-  } else {
-    const v1 = parse(version1)
-    const v2 = parse(version2)
-    const hasPre = v1.prerelease.length || v2.prerelease.length
-    const prefix = hasPre ? 'pre' : ''
-    const defaultResult = hasPre ? 'prerelease' : ''
-    for (const key in v1) {
-      if (key === 'major' || key === 'minor' || key === 'patch') {
-        if (v1[key] !== v2[key]) {
-          return prefix + key
-        }
-      }
-    }
-    return defaultResult // may be undefined
   }
+
+  const v1Higher = comparison > 0
+  const highVersion = v1Higher ? v1 : v2
+  const lowVersion = v1Higher ? v2 : v1
+  const highHasPre = !!highVersion.prerelease.length
+
+  // add the `pre` prefix if we are going to a prerelease version
+  const prefix = highHasPre ? 'pre' : ''
+
+  if (v1.major !== v2.major) {
+    return prefix + 'major'
+  }
+
+  if (v1.minor !== v2.minor) {
+    return prefix + 'minor'
+  }
+
+  if (v1.patch !== v2.patch) {
+    return prefix + 'patch'
+  }
+
+  // at this point we know stable versions match but overall versions are not equal,
+  // so either they are both prereleases, or the lower version is a prerelease
+
+  if (highHasPre) {
+    // high and low are preleases
+    return 'prerelease'
+  }
+
+  if (lowVersion.patch) {
+    // anything higher than a patch bump would result in the wrong version
+    return 'patch'
+  }
+
+  if (lowVersion.minor) {
+    // anything higher than a minor bump would result in the wrong version
+    return 'minor'
+  }
+
+  // bumping major/minor/patch all have same result
+  return 'major'
 }
+
 module.exports = diff
 
 
@@ -14247,8 +14310,9 @@ module.exports = gte
 
 const SemVer = __nccwpck_require__(8088)
 
-const inc = (version, release, options, identifier) => {
+const inc = (version, release, options, identifier, identifierBase) => {
   if (typeof (options) === 'string') {
+    identifierBase = identifier
     identifier = options
     options = undefined
   }
@@ -14257,7 +14321,7 @@ const inc = (version, release, options, identifier) => {
     return new SemVer(
       version instanceof SemVer ? version.version : version,
       options
-    ).inc(release, identifier).version
+    ).inc(release, identifier, identifierBase).version
   } catch (er) {
     return null
   }
@@ -14320,35 +14384,18 @@ module.exports = neq
 /***/ 5925:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
-const { MAX_LENGTH } = __nccwpck_require__(2293)
-const { re, t } = __nccwpck_require__(9523)
 const SemVer = __nccwpck_require__(8088)
-
-const parseOptions = __nccwpck_require__(785)
-const parse = (version, options) => {
-  options = parseOptions(options)
-
+const parse = (version, options, throwErrors = false) => {
   if (version instanceof SemVer) {
     return version
   }
-
-  if (typeof version !== 'string') {
-    return null
-  }
-
-  if (version.length > MAX_LENGTH) {
-    return null
-  }
-
-  const r = options.loose ? re[t.LOOSE] : re[t.FULL]
-  if (!r.test(version)) {
-    return null
-  }
-
   try {
     return new SemVer(version, options)
   } catch (er) {
-    return null
+    if (!throwErrors) {
+      return null
+    }
+    throw er
   }
 }
 
@@ -14528,6 +14575,7 @@ module.exports = {
   src: internalRe.src,
   tokens: internalRe.t,
   SEMVER_SPEC_VERSION: constants.SEMVER_SPEC_VERSION,
+  RELEASE_TYPES: constants.RELEASE_TYPES,
   compareIdentifiers: identifiers.compareIdentifiers,
   rcompareIdentifiers: identifiers.rcompareIdentifiers,
 }
@@ -14549,11 +14597,24 @@ const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER ||
 // Max safe segment length for coercion.
 const MAX_SAFE_COMPONENT_LENGTH = 16
 
+const RELEASE_TYPES = [
+  'major',
+  'premajor',
+  'minor',
+  'preminor',
+  'patch',
+  'prepatch',
+  'prerelease',
+]
+
 module.exports = {
-  SEMVER_SPEC_VERSION,
   MAX_LENGTH,
-  MAX_SAFE_INTEGER,
   MAX_SAFE_COMPONENT_LENGTH,
+  MAX_SAFE_INTEGER,
+  RELEASE_TYPES,
+  SEMVER_SPEC_VERSION,
+  FLAG_INCLUDE_PRERELEASE: 0b001,
+  FLAG_LOOSE: 0b010,
 }
 
 
@@ -14608,16 +14669,20 @@ module.exports = {
 /***/ 785:
 /***/ ((module) => {
 
-// parse out just the options we care about so we always get a consistent
-// obj with keys in a consistent order.
-const opts = ['includePrerelease', 'loose', 'rtl']
-const parseOptions = options =>
-  !options ? {}
-  : typeof options !== 'object' ? { loose: true }
-  : opts.filter(k => options[k]).reduce((o, k) => {
-    o[k] = true
-    return o
-  }, {})
+// parse out just the options we care about
+const looseOption = Object.freeze({ loose: true })
+const emptyOpts = Object.freeze({ })
+const parseOptions = options => {
+  if (!options) {
+    return emptyOpts
+  }
+
+  if (typeof options !== 'object') {
+    return looseOption
+  }
+
+  return options
+}
 module.exports = parseOptions
 
 
@@ -14830,7 +14895,7 @@ const Range = __nccwpck_require__(9828)
 const intersects = (r1, r2, options) => {
   r1 = new Range(r1, options)
   r2 = new Range(r2, options)
-  return r1.intersects(r2)
+  return r1.intersects(r2, options)
 }
 module.exports = intersects
 
@@ -15193,6 +15258,9 @@ const subset = (sub, dom, options = {}) => {
   return true
 }
 
+const minimumVersionWithPreRelease = [new Comparator('>=0.0.0-0')]
+const minimumVersion = [new Comparator('>=0.0.0')]
+
 const simpleSubset = (sub, dom, options) => {
   if (sub === dom) {
     return true
@@ -15202,9 +15270,9 @@ const simpleSubset = (sub, dom, options) => {
     if (dom.length === 1 && dom[0].semver === ANY) {
       return true
     } else if (options.includePrerelease) {
-      sub = [new Comparator('>=0.0.0-0')]
+      sub = minimumVersionWithPreRelease
     } else {
-      sub = [new Comparator('>=0.0.0')]
+      sub = minimumVersion
     }
   }
 
@@ -15212,7 +15280,7 @@ const simpleSubset = (sub, dom, options) => {
     if (options.includePrerelease) {
       return true
     } else {
-      dom = [new Comparator('>=0.0.0')]
+      dom = minimumVersion
     }
   }
 
