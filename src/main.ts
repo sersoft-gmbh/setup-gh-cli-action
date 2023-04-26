@@ -6,7 +6,35 @@ import * as path from 'path';
 import {Octokit} from '@octokit/rest';
 import {clean as semver_clean, compare as semver_compare} from 'semver';
 import * as os from 'os';
-import * as fs from "fs";
+import * as fs from 'fs';
+
+const osPlat= (() => {
+    switch (os.platform()) {
+        case 'linux': return 'linux';
+        case 'darwin': return 'macOS';
+        case 'win32': return 'windows';
+        default: throw new Error(`Unsupported platform: ${os.platform()}`);
+    }
+})();
+const osArch = (() => {
+    const arch = os.arch();
+    return (arch === 'x64') ? 'amd64' : arch;
+})();
+const toolName = 'gh-cli';
+const execName = osPlat === 'windows' ? 'gh.exe' : 'gh';
+
+function assetExtension(version: string): string {
+    if (osPlat === 'windows') return 'zip';
+    if (osPlat !== 'macOS') return 'tar.gz';
+    // macOS assets were changed to zips in 2.28.0.
+    return semver_compare(cleanedVersion(version), '2.28.0') === -1 ? 'tar.gz' : 'zip';
+}
+
+function cleanedVersion(version: string): string {
+    const semverVersion = semver_clean(version);
+    if (!semverVersion) throw new Error(`Invalid version: ${version}`);
+    return semverVersion;
+}
 
 class RequestedVersion {
     private static isStable(version: string): boolean {
@@ -23,9 +51,7 @@ class RequestedVersion {
             this.semverVersion = null;
             return;
         }
-        const v = semver_clean(this.inputVersion);
-        if (!v) throw new Error(`Invalid version: ${this.inputVersion}`);
-        this.semverVersion = v;
+        this.semverVersion = cleanedVersion(this.inputVersion);
     }
 
     get isStable(): boolean {
@@ -59,22 +85,6 @@ interface IRelease {
     tag_name: string;
     assets: IReleaseAsset[];
 }
-
-const osPlat= (() => {
-    switch (os.platform()) {
-        case 'linux': return 'linux';
-        case 'darwin': return 'macOS';
-        case 'win32': return 'windows';
-        default: throw new Error(`Unsupported platform: ${os.platform()}`);
-    }
-})();
-const osArch = (() => {
-    const arch = os.arch();
-    return (arch === 'x64') ? 'amd64' : arch;
-})();
-const toolName = 'gh-cli';
-const execName = osPlat === 'windows' ? 'gh.exe' : 'gh';
-const assetExtension = osPlat === 'windows' ? 'zip' : 'tar.gz';
 
 async function setAndCheckOutput(installedVersion: IInstalledVersion) {
     await core.group('Checking installation', async () => {
@@ -128,20 +138,25 @@ async function findMatchingRelease(version: RequestedVersion, token: string | nu
 
 async function install(asset: IReleaseAsset, version: string): Promise<IInstalledVersion> {
     const downloadedPath = await tools.downloadTool(asset.browser_download_url);
+    const extension = assetExtension(version);
     let extractedPath: string;
-    if (assetExtension === 'zip') {
-        extractedPath = await tools.extractZip(downloadedPath);
-    } else {
-        extractedPath = await tools.extractTar(downloadedPath);
-        extractedPath = path.join(extractedPath, path.basename(asset.name, `.${assetExtension}`));
+    switch (extension) {
+        case 'zip':
+            extractedPath = await tools.extractZip(downloadedPath);
+            break;
+        case 'tar.gz':
+            extractedPath = await tools.extractTar(downloadedPath);
+            extractedPath = path.join(extractedPath, path.basename(asset.name, `.${extension}`));
+            break;
+        default:
+            throw new Error(`Unsupported extension: ${extension}`);
     }
     const cachedPath = await tools.cacheDir(extractedPath, execName, toolName, version);
     return {version, path: cachedPath};
 }
 
 function checkCache(version: string): IInstalledVersion | null {
-    const semverVersion = semver_clean(version);
-    if (!semverVersion) throw new Error(`Invalid version: ${version}`);
+    const semverVersion = cleanedVersion(version);
     const cachedVersion = tools.find(toolName, semverVersion);
     if (cachedVersion) {
         core.info('Found cached version.');
@@ -172,8 +187,7 @@ async function main() {
     if (installedVersion) return await setAndCheckOutput(installedVersion);
 
     installedVersion = await core.group('Installing release', async () => {
-        const version = semver_clean(release.tag_name);
-        if (!version) throw new Error(`Invalid version: ${release.tag_name}`);
+        const version = cleanedVersion(release.tag_name);
         const assetName = `gh_${version}_${osPlat}_${osArch}.${assetExtension}`;
         const asset = release.assets.find(a => a.name === assetName);
         if (!asset) throw new Error(`Could not find a release asset for '${assetName}'`);
