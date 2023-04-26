@@ -182,10 +182,11 @@ async function install(asset, version) {
         default:
             throw new Error(`Unsupported extension: ${extension}`);
     }
-    const possibleSubfolder = path.basename(asset.name, `.${extension}`);
-    const contents = fs.readdirSync(extractedPath);
-    if (!contents.includes('bin') && contents.includes(possibleSubfolder)) {
-        extractedPath = path.join(extractedPath, possibleSubfolder);
+    const assetNameWithoutExtension = path.basename(asset.name, `.${extension}`);
+    let contents = fs.readdirSync(extractedPath);
+    if (!contents.includes('bin') && contents.includes(assetNameWithoutExtension)) {
+        extractedPath = path.join(extractedPath, assetNameWithoutExtension);
+        contents = fs.readdirSync(extractedPath);
     }
     if (!contents.includes('bin')) {
         core.debug(`Contents:\n${contents.join('\n')}`);
