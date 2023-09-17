@@ -1,12 +1,17 @@
 {
   "name": "setup-gh-cli-action",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Installs or updates the GitHub CLI.",
-  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
-    "pack": "rm -rf dist && ncc build lib/main.js -o dist"
+    "pack": "rm -rf dist && ncc build lib/main.js -o dist --license license.txt --target es2022"
   },
   "repository": {
     "type": "git",
@@ -31,6 +36,7 @@
     "semver": "^7.5.4"
   },
   "devDependencies": {
+    "@tsconfig/node20": "^20.1.2",
     "@types/node": "^20.6.2",
     "@types/semver": "^7.5.2",
     "@vercel/ncc": "^0.38.0",
