@@ -31,7 +31,7 @@
     "semver": "^7.5.4"
   },
   "devDependencies": {
-    "@types/node": "^16.18.50",
+    "@types/node": "^20.6.2",
     "@types/semver": "^7.5.2",
     "@vercel/ncc": "^0.38.0",
     "typescript": "^5.2.2"

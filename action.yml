@@ -13,7 +13,7 @@ outputs:
   installed-version:
     description: The full version that was installed.
 runs:
-  using: node16
+  using: node20
   main: dist/index.js
 branding:
   color: white
