@@ -33,7 +33,7 @@
     "@actions/github": "^6.0.0",
     "@actions/tool-cache": "^2.0.1",
     "@octokit/rest": "^20.0.2",
-    "semver": "^7.5.4"
+    "semver": "^7.6.0"
   },
   "devDependencies": {
     "@tsconfig/node20": "^20.1.2",
