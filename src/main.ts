@@ -95,7 +95,7 @@ async function setAndCheckOutput(installedVersion: IInstalledVersion) {
 async function findMatchingRelease(version: RequestedVersion, token: string | null): Promise<IRelease> {
     let octokit: Octokit;
     if (token) {
-        octokit = github.getOctokit(token) as unknown as Octokit;
+        octokit = new Octokit({auth: token});
     } else {
         octokit = new Octokit();
     }
