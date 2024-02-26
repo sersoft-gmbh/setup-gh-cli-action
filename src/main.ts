@@ -1,7 +1,6 @@
 import * as core from '@actions/core';
 import {getExecOutput} from '@actions/exec';
 import * as tools from '@actions/tool-cache';
-import * as github from '@actions/github';
 import * as path from 'path';
 import {Octokit} from '@octokit/rest';
 import {clean as semver_clean, compare as semver_compare} from 'semver';
