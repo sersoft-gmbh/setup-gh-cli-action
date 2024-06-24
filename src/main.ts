@@ -39,7 +39,7 @@ function cleanedVersion(version: string): ICleanedVersion {
 function assetExtension(version: ICleanedVersion): string {
     if (osPlat === 'windows') return 'zip';
     if (osPlat !== 'macOS') return 'tar.gz';
-    // macOS assets were changed to zips in 2.28.0.
+    // The macOS assets were changed to zips in 2.28.0.
     return semver_compare(version.versionString, '2.28.0') === -1 ? 'tar.gz' : 'zip';
 }
 
