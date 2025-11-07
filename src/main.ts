@@ -8,7 +8,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 
 interface ICleanedVersion {
-    versionString: string;
+    readonly versionString: string;
 }
 
 const osPlat = (() => {
@@ -25,7 +25,7 @@ const osPlat = (() => {
 })();
 const osArch = (() => {
     const arch = os.arch();
-    return (arch === 'x64') ? 'amd64' : arch;
+    return arch === 'x64' ? 'amd64' : arch;
 })();
 const toolName = 'gh-cli';
 const execName = osPlat === 'windows' ? 'gh.exe' : 'gh';
@@ -83,19 +83,19 @@ class RequestedVersion {
 }
 
 interface IInstalledVersion {
-    version: ICleanedVersion;
-    path: string;
+    readonly version: ICleanedVersion;
+    readonly path: string;
 }
 
 interface IReleaseAsset {
-    name: string;
-    url: string;
-    browser_download_url: string;
+    readonly name: string;
+    readonly url: string;
+    readonly browser_download_url: string;
 }
 
 interface IRelease {
-    version: ICleanedVersion;
-    assets: IReleaseAsset[];
+    readonly version: ICleanedVersion;
+    readonly assets: readonly IReleaseAsset[];
 }
 
 async function setAndCheckOutput(installedVersion: IInstalledVersion) {
@@ -115,12 +115,7 @@ async function setAndCheckOutput(installedVersion: IInstalledVersion) {
 }
 
 async function findMatchingRelease(version: RequestedVersion, token: string | null): Promise<IRelease> {
-    let octokit: Octokit;
-    if (token) {
-        octokit = new Octokit({auth: token});
-    } else {
-        octokit = new Octokit();
-    }
+    const octokit: Octokit = token ? new Octokit({auth: token}) : new Octokit();
 
     const baseParams = {
         owner: 'cli',
@@ -200,13 +195,11 @@ function checkCache(version: ICleanedVersion): IInstalledVersion | null {
 async function main() {
     core.startGroup('Validate input');
     const version = new RequestedVersion(core.getInput('version', {required: true}));
-    const ghToken = core.getInput('github-token');
+    const ghToken = core.getInput('github-token') || null;
     core.endGroup();
 
     let installedVersion = await core.group('Checking cache', async () => {
-        if (!version.isStable && !version.isLatest)
-            return checkCache(version.cleanedVersion);
-        return null;
+        return !version.isStable && !version.isLatest ? checkCache(version.cleanedVersion) : null;
     });
     if (installedVersion) return await setAndCheckOutput(installedVersion);
 

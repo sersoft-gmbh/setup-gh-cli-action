@@ -27,7 +27,7 @@ The full version was installed.
 ## Example Usage
 
 ```yaml
-uses: sersoft-gmbh/setup-gh-cli-action@v2
+uses: sersoft-gmbh/setup-gh-cli-action@v3
 with:
   version: stable
 ```
