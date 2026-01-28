@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "description": "Installs or updates the GitHub CLI.",
   "engines": {
-    "node": ">=24"
+    "node": "^24"
   },
   "type": "module",
   "exports": {
