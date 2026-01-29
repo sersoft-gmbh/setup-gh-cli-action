@@ -30,7 +30,7 @@
   "homepage": "https://github.com/sersoft-gmbh/setup-gh-cli-action#readme",
   "dependencies": {
     "@actions/core": "^3.0.0",
-    "@actions/exec": "^2.0.0",
+    "@actions/exec": "^3.0.0",
     "@actions/tool-cache": "^3.0.1",
     "@octokit/rest": "^22.0.1",
     "semver": "^7.7.3"
